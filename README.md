@@ -25,11 +25,11 @@ huggingface-cli login
 ```
 
 ## Data
-The full dataset combining 83 concepts from our manually curated subset of [Imagenet-R](https://github.com/hendrycks/imagenet-r) and 9 concepts from [original work](https://github.com/rinongal/textual_inversion/#pretrained-models--data) can be downloaded [here](https://drive.google.com/drive/folders/1ZsU_PJkEOaeQreV7SjfDNAibFleUB6ib?usp=sharing). 
+The full dataset combining 83 concepts from our manually curated subset of [Imagenet-R](https://github.com/hendrycks/imagenet-r) and 9 concepts from the [original work](https://github.com/rinongal/textual_inversion/#pretrained-models--data) can be downloaded [here](https://drive.google.com/drive/folders/1ZsU_PJkEOaeQreV7SjfDNAibFleUB6ib?usp=sharing). 
 Below, we show an example of running our experiments with the "cat_statue" concept.
 
 ## Main experiments
-Our work based on [Textual Inversion](https://arxiv.org/abs/2208.01618) paper and its [diffusers implementation](https://github.com/huggingface/diffusers/tree/main/examples/textual_inversion).
+Our work is based on [Textual Inversion](https://arxiv.org/abs/2208.01618) paper and its [diffusers implementation](https://github.com/huggingface/diffusers/tree/main/examples/textual_inversion).
 The following commands can be used to reproduce the results presented in Table 1 of our paper. 
 In order to reproduce results from Table 2, please run the "Baseline" method with varying `--init_strategy` parameter value (note that `--init_strategy=manual` requires specifying `--initialization_token`). 
 To obtain numbers from Table 3, please also specify `--optimizer sam` in the baseline training script.
