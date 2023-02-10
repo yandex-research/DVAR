@@ -1,8 +1,8 @@
 # Is This Loss Informative? Speeding Up Textual Inversion with Deterministic Objective Evaluation
 
-[![arXiv](https://img.shields.io/badge/arXiv-2208.01618-b31b1b.svg)](https://arxiv.org/abs/2302.04841)
+[![arXiv](https://img.shields.io/badge/arXiv-2302.04841-b31b1b.svg)](https://arxiv.org/abs/2302.04841)
 
-In our work we propose a simple evaluation objective that allows to speed up Textual Inversion by 10-15 times without significant drop in quality. This repository contains the official code and data for our paper. 
+In our work we propose a simple evaluation objective that allows to speed up Textual Inversion by 10-15 times without significant drop in quality. This repository contains the official code and data for [our paper](https://arxiv.org/abs/2302.04841). 
 
 <p align="center">
 <img src="img/teaser-1.png" alt="teaser" width="600"/>
@@ -167,14 +167,12 @@ python textual_inversion.py \
 If you make use of our work, please cite our paper:
 
 ```
-@misc{https://doi.org/10.48550/arxiv.2302.04841,
-  doi = {10.48550/ARXIV.2302.04841},
-  url = {https://arxiv.org/abs/2302.04841},
-  author = {Voronov, Anton and Khoroshikh, Mikhail and Babenko, Artem and Ryabinin, Max},
-  title = {Is This Loss Informative? Speeding Up Textual Inversion with Deterministic Objective Evaluation},
-  publisher = {arXiv},
-  year = {2023},
-  copyright = {arXiv.org perpetual, non-exclusive license}
-  keywords = {Computer Vision and Pattern Recognition (cs.CV), Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences},
+@misc{voronov2023loss,
+    title={Is This Loss Informative? Speeding Up Textual Inversion with Deterministic Objective Evaluation},
+    author={Anton Voronov and Mikhail Khoroshikh and Artem Babenko and Max Ryabinin},
+    year={2023},
+    eprint={2302.04841},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
 }
 ```
