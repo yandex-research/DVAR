@@ -1,5 +1,7 @@
 # Is This Loss Informative? Speeding Up Textual Inversion with Deterministic Objective Evaluation
 
+[![arXiv](https://img.shields.io/badge/arXiv-2208.01618-b31b1b.svg)](https://arxiv.org/abs/2302.04841)
+
 In our work we propose a simple evaluation objective that allows to speed up Textual Inversion by 10-15 times without significant drop in quality. This repository contains the official code and data for our paper. 
 
 <p align="center">
@@ -160,4 +162,19 @@ python textual_inversion.py \
   --eval_gradient_accumulation_steps 2 \
   --logger wandb \
   --seed 59
+```
+## Citation
+If you make use of our work, please cite our paper:
+
+```
+@misc{https://doi.org/10.48550/arxiv.2302.04841,
+  doi = {10.48550/ARXIV.2302.04841},
+  url = {https://arxiv.org/abs/2302.04841},
+  author = {Voronov, Anton and Khoroshikh, Mikhail and Babenko, Artem and Ryabinin, Max},
+  title = {Is This Loss Informative? Speeding Up Textual Inversion with Deterministic Objective Evaluation},
+  publisher = {arXiv},
+  year = {2023},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+  keywords = {Computer Vision and Pattern Recognition (cs.CV), Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences},
+}
 ```
