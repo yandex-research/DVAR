@@ -28,7 +28,7 @@ huggingface-cli login
 ```
 
 ## Data
-In our work we conduct experiments on the 9 concepts released by the authors of [Textual Inversion](https://github.com/rinongal/textual_inversion/#pretrained-models--data), 9 concepts from [Custom Diffusion](https://github.com/adobe-research/custom-diffusion#getting-started) and 30 concepts found in official [DreamBooth repository](https://github.com/google/dreambooth/tree/main/dataset). 
+In our work we conduct experiments on the 9 concepts released by the authors of [Textual Inversion](https://github.com/rinongal/textual_inversion/#pretrained-models--data), 9 concepts from [Custom Diffusion](https://github.com/adobe-research/custom-diffusion#getting-started) and 30 concepts found in the official [DreamBooth repository](https://github.com/google/dreambooth/tree/main/dataset). 
 Below, we show an example of running our experiments with the "cat_statue" concept.
 
 ## Main experiments
