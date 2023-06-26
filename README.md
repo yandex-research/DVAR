@@ -28,7 +28,7 @@ huggingface-cli login
 ```
 
 ## Data
-In our work we conduct experiments on the 9 concepts released by the authors of [Textual Inversion](https://github.com/rinongal/textual_inversion/#pretrained-models--data) and 9 concepts from [Custom Diffusion](https://github.com/adobe-research/custom-diffusion#getting-started). 
+In our work we conduct experiments on the 9 concepts released by the authors of [Textual Inversion](https://github.com/rinongal/textual_inversion/#pretrained-models--data), 9 concepts from [Custom Diffusion](https://github.com/adobe-research/custom-diffusion#getting-started) and 30 concepts found in official [DreamBooth repository](https://github.com/google/dreambooth/tree/main/dataset). 
 Below, we show an example of running our experiments with the "cat_statue" concept.
 
 ## Main experiments
@@ -37,8 +37,6 @@ In this repository, we combine our proposed improvements with the diffusers impl
 The following commands can be used to reproduce the results presented in Table 1 of our paper (remove `--center_crop` option when using `--method custom`).
 ### Baseline
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-
 python textual_inversion.py \
   --method [inversion/custom/dreambooth] \
   --variant vanilla \
@@ -63,8 +61,6 @@ python textual_inversion.py \
 ```
 ### CLIP Early Stopping
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-
 python textual_inversion.py \
   --method [inversion/custom/dreambooth] \
   --variant clip_early_stopping \
@@ -91,8 +87,6 @@ python textual_inversion.py \
 ```
 ### Few iters
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-
 python textual_inversion.py \
   --method [inversion/custom/dreambooth] \
   --variant short_iters \
@@ -118,8 +112,6 @@ python textual_inversion.py \
 ### DVAR
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-
 python textual_inversion.py \
   --method [inversion/custom/dreambooth] \
   --variant dvar_early_stopping \
@@ -152,8 +144,6 @@ For example, `exp_code=10101` means that every evaluation batch will have the sa
 To get the effective size of the validation batch as big as 512, one can vary the `--eval_gradient_accumulation_steps` parameter.
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-
 python textual_inversion.py \
   --max_train_steps 2500 \
   --method inversion \
@@ -178,9 +168,7 @@ python textual_inversion.py \
 ### Fixed timesteps correlations
 The only additional "--triple" command needed, then "eval_loss_begin", "eval_loss_middle", "eval_loss_end" will be logged.
 
-```
-export CUDA_VISIBLE_DEVICES=0
-
+```bash
 python textual_inversion.py \
   --max_train_steps 1500 \
   --method inversion \
