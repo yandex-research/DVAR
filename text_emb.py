@@ -20,8 +20,8 @@ class SplitEmbedding(nn.Embedding):
 class TextualInversionCLIPTextModel(CLIPTextModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
-        embed_dim = config.projection_dim
-        self.text_model.embeddings.token_embedding = SplitEmbedding(config.vocab_size, embed_dim)
+        vocab_size, embed_dim = self.text_model.embeddings.token_embedding.weight.size()
+        self.text_model.embeddings.token_embedding = SplitEmbedding(vocab_size, embed_dim)
 
     def patch_emb(self, init_embedding: torch.Tensor):
         self.text_model.embeddings.token_embedding.concept_token = Parameter(init_embedding.unsqueeze(0))

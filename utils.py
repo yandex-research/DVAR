@@ -7,9 +7,12 @@ import numpy as np
 import PIL
 import torch
 import torchvision
-import wandb
 from accelerate.logging import get_logger
+from accelerate.utils import set_seed
 from PIL import Image
+from lora_diffusion import save_lora_weight
+
+import wandb
 
 logger = get_logger(__name__)
 
@@ -21,12 +24,23 @@ def dataset_log(path: str):
     wandb.log({"CONCEPT": images})
 
 
-def save_progress(embedding, placeholder_token, logging_dir, name="learned_embeds.bin"):
+def save_progress(object_to_save, placeholder_token, output_dir, name="learned_embeds.bin", method='inversion'):
     logger.info("Saving embeddings")
-    base_path = os.path.join(logging_dir, "embeds")
+    base_path = os.path.join(output_dir, "embeds")
     os.makedirs(base_path, exist_ok=True)
-    learned_embeds_dict = {placeholder_token: embedding}
-    torch.save(learned_embeds_dict, os.path.join(base_path, name))
+    save_path = os.path.join(base_path, name)
+    if method == 'inversion':
+        learned_embeds_dict = {placeholder_token: object_to_save}
+        torch.save(learned_embeds_dict, save_path)
+    elif method == 'custom':
+        object_to_save.save_pretrained(save_path)
+    elif method == 'dreambooth':
+        learned_embeds_dict, unet = {placeholder_token: object_to_save[0]}, object_to_save[1]
+        torch.save(learned_embeds_dict, save_path)
+        unet_path = os.path.join(output_dir, "lora", name.split(".")[0] + ".pt")
+        os.makedirs(unet_path, exist_ok=True)
+        #save_lora_weight(unet, unet_path)
+
 
 
 def freeze_params(params):
@@ -39,8 +53,21 @@ def transform_img(img):
     cropped_img = tensor_img / 127.5 - 1
     return cropped_img
 
+@torch.inference_mode()
+def sample(pipeline, prompts, sample_steps=50, guidance=7.5, fp16=True, sampling_seed=37):
+    with torch.random.fork_rng(devices=['cuda', 'cpu']), torch.autocast("cuda", enabled=fp16):
+        set_seed(sampling_seed)
+        return pipeline(prompts, num_inference_steps=sample_steps, guidance_scale=guidance).images
 
-def log_images(images: List[PIL.Image.Image], name: str = "", logging_dir: str = "", step=-1, cols=4):
+@torch.inference_mode()
+def sample(pipeline, prompts, sample_steps=50, guidance=7.5, fp16=True, sampling_seed=37):
+    with torch.random.fork_rng(devices=['cuda', 'cpu']), torch.autocast("cuda", enabled=fp16):
+        set_seed(sampling_seed)
+        return pipeline(prompts, num_inference_steps=sample_steps, guidance_scale=guidance, eta=1.).images
+
+
+def log_images(images: List[PIL.Image.Image], prompts=None,
+               name: str = "", logging_dir: str = "", step=-1, cols=4, logger="wandb"):
     output_dir = os.path.join(logging_dir, "images", name)
     # log_locally:
     os.makedirs(output_dir, exist_ok=True)
@@ -48,62 +75,59 @@ def log_images(images: List[PIL.Image.Image], name: str = "", logging_dir: str =
     w, h = images[0].size
     grid = Image.new('RGB', size=(cols * w, rows * h))
     for i, image in enumerate(images):
-        if name != "train":
-            image.save(os.path.join(output_dir, f"gs-{step}_{i}.jpg"))
+        if not image.mode == "RGB":
+            image = image.convert("RGB")
+        image.save(os.path.join(output_dir, f"gs-{step}_{i}.jpg"))
         grid.paste(image, box=(i % cols * w, i // cols * h))
     grid.save(os.path.join(output_dir, f"gs-{step}_grid.jpg"))
 
-    return grid
-
-
-def sample(prompts, pipe, clip, logger, input, logging_dir,
-           bs, sample_steps, guidance, log_unscaled, step=0, fp16=False):
-    n_iters = math.ceil(len(prompts) / bs)
-    samples_scaled = []
-    reference_images = []
-
-    with torch.inference_mode(), torch.autocast("cuda", enabled=fp16):
-        for i in range(n_iters):
-            generated = pipe(prompts[i * bs: (i + 1) * bs],
-                             num_inference_steps=sample_steps, guidance_scale=guidance).images
-            samples_scaled.extend(generated)
-            reference_images.extend(input)
-
-        reference_images = torch.stack(reference_images[:len(samples_scaled)])
-        clip_img_score = clip.img_to_img_similarity(reference_images, samples_scaled)
-        clip_txt_score = clip.txt_to_img_similarity(prompts, samples_scaled)
-
-    grid = log_images(samples_scaled, step=step, name="scaled", logging_dir=logging_dir)
+    # log online
     if logger == "wandb":
-        images_scaled = [wandb.Image(sample_, caption=prompts[idx]) for idx, sample_ in enumerate(samples_scaled)]
-        wandb.log({
-            "samples_scaled": images_scaled,
-            "clip_img_score": clip_img_score,
-            "clip_txt_score": clip_txt_score,
-        }, step=step)
+        images = [wandb.Image(sample_, caption=prompts[idx]) for idx, sample_ in enumerate(images)]
+        wandb.log({name: images}, commit=False, step=step)
     else:
-        logger.add_image("scaled", np.array(grid).transpose(2, 0, 1), step)
-        logger.add_scalar("clip_img_score", clip_img_score, step)
-        logger.add_scalar("clip_txt_score", clip_txt_score, step)
+        logger.add_image(name, np.array(grid).transpose(2, 0, 1), step)
+
+
+def calc_clip(clip, generated_images, reference_images, prompts, placeholder_token,
+              step=0, split='train'):
+    clip_img_score = clip.img_to_img_similarity(reference_images, generated_images).item()
+    prompts = [x.replace(placeholder_token, '') for x in prompts]
+    clip_txt_score = clip.txt_to_img_similarity(prompts, generated_images).item()
+    logs = {f"{split}_clip_img_score": clip_img_score, f"{split}_clip_txt_score": clip_txt_score}
+
+    return logs
+
+
+def evaluate(pipeline, train_prompts, val_prompts, clip, ref_images, logging_dir, placeholder_token,
+             sample_steps=50, guidance=7.5, fp16=True, sampling_seed=37, log_unscaled=False, step=0, logger='wandb'):
+    # sample
+    train_samples = sample(pipeline, train_prompts, sample_steps, guidance, fp16, sampling_seed)
+    # log
+    log_images(train_samples, train_prompts, name=f'samples_scaled', logging_dir=logging_dir, step=step, logger=logger)
+    # and score
+    logs = {"clip_step": step}
+    logs.update(calc_clip(clip, train_samples, ref_images[:len(train_samples)], train_prompts, placeholder_token,
+                          split='train', step=step))
+
+    if val_prompts:
+        val_samples = sample(pipeline, val_prompts, sample_steps, guidance, fp16, sampling_seed)
+        log_images(val_samples, val_prompts, name='val_samples', logging_dir=logging_dir, step=step, logger=logger)
+        logs.update(calc_clip(clip, val_samples, ref_images[:len(val_samples)], val_prompts, placeholder_token,
+                              split='val', step=step))
 
     if log_unscaled:
-        samples = pipe(prompts[:bs], num_inference_steps=sample_steps, guidance_scale=0).images
-        grid = log_images(samples, step=step, name="unscaled", logging_dir=logging_dir)
-
-        if logger == "wandb":
-            images = [wandb.Image(sample_, caption=prompts[idx]) for idx, sample_ in enumerate(samples)]
-            wandb.log({"samples_unscaled": images}, step=step)
-        else:
-            logger.add_image("unscaled", np.array(grid).transpose(2, 0, 1), step)
-
-    return clip_img_score
+        samples = sample(pipeline, train_prompts, sample_steps, guidance=0, fp16=fp16, sampling_seed=sampling_seed)
+        log_images(samples, train_prompts, name=f"samples_unscaled",
+                   logging_dir=logging_dir, step=step, logger=logger)
+    return logs
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
         "--model", "-m",
-        required=True,
+        default='sd',
         choices=["sd", "ldm"],
         help="Model for the pipeline: Stable Diffusion or Latent Diffusion"
     )
@@ -166,7 +190,7 @@ def parse_args():
         "--center_crop", action="store_true", help="Whether to center crop images before resizing to resolution"
     )
     parser.add_argument(
-        "--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader."
+        "--train_batch_size", type=int, default=2, help="Batch size (per device) for the training dataloader."
     )
     parser.add_argument(
         "--eval_batch_size", type=int, default=4, help="Size of the evaluation batch."
@@ -193,7 +217,6 @@ def parse_args():
     parser.add_argument(
         "--scale_lr",
         action="store_true",
-        default=True,
         help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
     )
     parser.add_argument(
@@ -240,22 +263,19 @@ def parse_args():
                         help="Add this if you want to save the whole pipeline and not only learned embeddings")
     parser.add_argument("--pipeline_output_dir", default="", type=str,
                         help="By default equals to output_dir, where all learned embeddings will be saved")
-    parser.add_argument("--save_init_embeds", default=True, action="store_true",
+    parser.add_argument("--save_init_embeds", action="store_true",
                         help="Sanity check for embedding initialization")
-    parser.add_argument("--log_unscaled", default=False, action="store_true",
+    parser.add_argument("--log_unscaled", action="store_true",
                         help="Whether to generate and save samples from unconditional generation")
     parser.add_argument("--sample_before_start", action="store_true",
                         help="Disable if you don't need a sanity check for sampling with "
                              "initial embeddings initialization")
     parser.add_argument("--sample_frequency", default=50, type=int, help="frequency of samples generation and logging")
-    parser.add_argument("--sample_steps", default=200, type=int, help="number of DDIM sampler steps during generation")
+    parser.add_argument("--sample_steps", default=50, type=int, help="number of DDIM sampler steps during generation")
     parser.add_argument("--sampling_seed", default=37, type=int,
                         help="fixed seed for sampling, different from training in order "
                              "not to train on the same examples")
-    parser.add_argument("--template_set", default="default", type=str,
-                        help="Strategy to select captions templates. Possible choices are: "
-                             "default (imagenet_templates_base), one (only a{}), top-k (best templates for each image)")
-    parser.add_argument("--n_val_prompts", default=8, type=int)
+    parser.add_argument("--n_train_prompts", default=8, type=int)
     parser.add_argument("--init_strategy", default="manual", choices=["manual", "best", "worst", "random"],
                         help="strategy to select initial word embedding. "
                              "If not manual --initializer_token argument is ignored")
@@ -287,6 +307,8 @@ def parse_args():
                              "Ours method doesn't sample at all and stops by variance early stopping criteria",
                         default="vanilla"
                         )
+    parser.add_argument("--triple", action="store_true",
+                        help="Intervals eval")
     parser.add_argument("--early_stop_eps", type=float, default=0.15,
                         help="change lower this value is not considered as a significant improvement")
     parser.add_argument("--early_stop_patience", type=int, default=200,
@@ -296,7 +318,18 @@ def parse_args():
     parser.add_argument("--mean_noise", action="store_true",
                         help="if used, fixed noise equals its expectation, i.e. null vector")
     parser.add_argument("--mean_latent", action="store_true", help="if used, fixed latent equals its expectation")
-
+    parser.add_argument("--validation_prompts", default="", help="Comma separated list of validation prompts")
+    parser.add_argument("--n_images_per_val_prompt", type=int, default=0,
+                        help="Number of images generated for each validation prompt")
+    parser.add_argument("--clip_path", default="ViT-B/32", help="Path to clip model for offline mode")
+    parser.add_argument("--class_prompt", default="cat", help="Coarse class description of the learned object")
+    parser.add_argument("--class_data_dir", default=None,
+                        help="Path to the folder where regularization images are stored or will be downloaded to")
+    parser.add_argument("--num_class_images", type=int, default=200,
+                        help="Number of regularization images for each coarse class")
+    parser.add_argument("--method", choices=['inversion', 'dreambooth', 'custom'], default='inversion',
+                        help="Which personalization method to use: "
+                             "Textual Inversion, Dreambooth-LoRA or Custom Diffusion")
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:

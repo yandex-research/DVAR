@@ -1,11 +1,10 @@
-from collections import defaultdict
 import os
 import random
 import time
+from collections import defaultdict
 
 import PIL
 import torch
-import wandb
 from PIL import Image
 from torch.nn.functional import cosine_similarity
 from torchvision import transforms
@@ -13,6 +12,7 @@ from tqdm import tqdm
 from transformers import BertTokenizer, CLIPTokenizer
 
 import clip
+import wandb
 from templates import imagenet_templates_base
 
 
@@ -59,11 +59,14 @@ class CLIPEvaluator:
         else:
             return cosine_similarity(src_img_features, gen_img_features)
 
-    def txt_to_img_similarity(self, text, generated_images):
+    def txt_to_img_similarity(self, text, generated_images, reduction=True):
         text_features = self.get_text_features(text)
         gen_img_features = self.get_image_features(generated_images)
 
-        return cosine_similarity(text_features, gen_img_features).mean()
+        if reduction:
+            return cosine_similarity(text_features, gen_img_features).mean()
+        else:
+            return cosine_similarity(text_features, gen_img_features)
 
 
 @torch.inference_mode()
@@ -119,35 +122,3 @@ def select_init(data_dir, tokenizer, strategy, logger="wandb"):
         wandb.config.update({"init_token": token, "init_selection_time": end_time - start_time})
     return token_id
 
-
-@torch.inference_mode()
-def select_best_templates(img_paths, k: int):
-    captions_cut_to_orig = defaultdict(list)
-    captions_cut = [caption.format("") for caption in imagenet_templates_base]
-    # remove all utility words
-    captions_cut = [" ".join([x for x in caption.split() if len(x) > 3]) for caption in captions_cut]
-    # for every unique caption keep all the variations that produced it
-    for cut_caption, orig_caption in zip(captions_cut, imagenet_templates_base):
-        captions_cut_to_orig[cut_caption].append(orig_caption)
-
-    # keep only unique captions
-    captions_cut = list(captions_cut_to_orig.keys())
-    if k >= len(captions_cut):
-        return imagenet_templates_base
-
-    image_to_captions = defaultdict(list)
-    clip_eval = CLIPEvaluator(device="cuda")
-
-    caption_embeds = clip_eval.get_text_features(captions_cut).to("cpu")
-    image_features = clip_eval.get_image_features([Image.open(x) for x in img_paths]).to("cpu")
-
-    for i, image_path in enumerate(img_paths):
-        # score against each caption template
-        scores = image_features[i].repeat((len(captions_cut), 1)) * caption_embeds
-        scores = scores.sum(dim=1).numpy()
-        # save k best templates in all their initial variations
-        top_k_indices = scores.argsort()[:-(k + 1):-1]
-        for j in top_k_indices:
-            image_to_captions[image_path].extend(captions_cut_to_orig[captions_cut[j]])
-
-    return image_to_captions
