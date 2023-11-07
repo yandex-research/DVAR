@@ -25,6 +25,7 @@ from lora_diffusion import inject_trainable_lora, extract_lora_ups_down
 
 import wandb
 from clip_scores import CLIPEvaluator, select_init
+from dino_scores import DINOEvaluator, DIVEvaluator
 from custom_diffusion import retrieve, create_custom_diffusion, CustomDiffusionPipeline
 from data import TextualInversionDataset, collate_fn
 from early_stopping import ClipEarlyStopper, VarEarlyStopper
@@ -358,8 +359,10 @@ def main():
     val_prompts = val_prompts * args.n_images_per_val_prompt
     reference_images = [train_images[i % len(train_images)] for i in range(max(args.n_train_prompts, len(val_prompts)))]
 
-    # initialize clip for samples evaluation
+   # initialize clip/dino/div for samples evaluation
     clip = CLIPEvaluator(device=accelerator.device, clip_model=args.clip_path)
+    dino = DINOEvaluator(device=accelerator.device) 
+    div = DIVEvaluator(device=accelerator.device)
 
     with open(f"{logging_dir}/train_prompts.txt", "w") as f:
         f.writelines("\n".join(train_prompts))
@@ -372,7 +375,7 @@ def main():
             name = "initial_weights.bin"
             save_progress(object_to_save, args.placeholder_token, logging_dir, name=name, method=args.method)
         if args.sample_before_start:
-            evaluate(pipeline, train_prompts, val_prompts, clip, reference_images, logging_dir, args.placeholder_token,
+            evaluate(pipeline, train_prompts, val_prompts, clip, dino, div, reference_images, logging_dir, args.placeholder_token,
                      sample_steps=args.sample_steps, guidance=args.guidance, fp16=args.fp16, step=global_step,
                      sampling_seed=args.sampling_seed, log_unscaled=args.log_unscaled, logger=stat_logger)
 

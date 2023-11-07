@@ -98,8 +98,15 @@ def calc_clip(clip, generated_images, reference_images, prompts, placeholder_tok
 
     return logs
 
+def calc_dino_div(dino, div, generated_images, split="train"):
+    dino_score = dino.img_to_img_similarity(reference_images, generated_images).item()
+    div_score = div.get_score(generated_images).item()
+    logs = {f"{split}_dino_score": dino_score, f"{split}_div_score": div_score}
 
-def evaluate(pipeline, train_prompts, val_prompts, clip, ref_images, logging_dir, placeholder_token,
+    return logs
+
+
+def evaluate(pipeline, train_prompts, val_prompts, clip, dino, div, ref_images, logging_dir, placeholder_token,
              sample_steps=50, guidance=7.5, fp16=True, sampling_seed=37, log_unscaled=False, step=0, logger='wandb'):
     # sample
     train_samples = sample(pipeline, train_prompts, sample_steps, guidance, fp16, sampling_seed)
@@ -109,6 +116,7 @@ def evaluate(pipeline, train_prompts, val_prompts, clip, ref_images, logging_dir
     logs = {"clip_step": step}
     logs.update(calc_clip(clip, train_samples, ref_images[:len(train_samples)], train_prompts, placeholder_token,
                           split='train', step=step))
+    logs.update(calc_dino_div(dino, div, train_samples))
 
     if val_prompts:
         val_samples = sample(pipeline, val_prompts, sample_steps, guidance, fp16, sampling_seed)
